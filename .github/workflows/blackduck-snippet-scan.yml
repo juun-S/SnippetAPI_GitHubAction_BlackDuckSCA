@@ -1,0 +1,154 @@
+name: Black Duck Snippet Security Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  snippet-scan:
+    name: Black Duck Snippet Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    env:
+      BLACKDUCKSCA_URL: ${{ vars.BLACKDUCKSCA_URL }}
+      BLACKDUCKSCA_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract changed code from Pull Request
+        id: extract_code
+        run: |
+          git diff --unified=0 ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | \
+          grep -E "^\\+" | \
+          grep -Ev "^\\+\\+\"" | \
+          sed 's/^+//' > changed_code.txt || true
+
+          if [ -s changed_code.txt ]; then
+            echo "--- Code Snippets to be Scanned ---"
+            cat changed_code.txt
+            echo "-----------------------------------"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No new code changes detected in this Pull Request."
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Scan snippet with Black Duck API
+        if: steps.extract_code.outputs.changed == 'true'
+        id: bd_scan
+        run: |
+          AUTH_RESPONSE_FILE=$(mktemp)
+          AUTH_HTTP_CODE=$(curl -s -o "$AUTH_RESPONSE_FILE" -w "%{http_code}" -X POST \
+            --header "Authorization: token ${BLACKDUCKSCA_TOKEN}" \
+            "${BLACKDUCKSCA_URL}/api/tokens/authenticate")
+          
+          AUTH_BODY=$(cat "$AUTH_RESPONSE_FILE")
+          rm "$AUTH_RESPONSE_FILE"
+
+          if [ "$AUTH_HTTP_CODE" -ne 200 ]; then
+            echo "::error::Failed to get Bearer Token from Black Duck (HTTP Code: $AUTH_HTTP_CODE)"
+            echo "::error::Response: $AUTH_BODY"
+            exit 1
+          fi
+
+          BEARER_TOKEN=$(echo "${AUTH_BODY}" | jq -r '.bearerToken')
+          if [ -z "$BEARER_TOKEN" ] || [ "$BEARER_TOKEN" == "null" ]; then
+            echo "::error::Bearer Token is empty. Authentication failed."
+            echo "::error::Response: $AUTH_BODY"
+            exit 1
+          fi
+          echo "Successfully obtained Bearer Token."
+
+          SCAN_RESPONSE_FILE=$(mktemp)
+          SCAN_HTTP_CODE=$(curl -s -o "$SCAN_RESPONSE_FILE" -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${BEARER_TOKEN}" \
+            -H "Content-Type: text/plain" \
+            -H "Accept: application/json" \
+            --data-binary @changed_code.txt \
+            "${BLACKDUCKSCA_URL}/api/snippet-matching")
+          
+          SCAN_BODY=$(cat "$SCAN_RESPONSE_FILE")
+          rm "$SCAN_RESPONSE_FILE"
+
+          if [ "$SCAN_HTTP_CODE" -ne 200 ]; then
+            echo "::error::Black Duck Snippet Scan API call failed (HTTP Code: $SCAN_HTTP_CODE)"
+            echo "::error::Response: $SCAN_BODY"
+            exit 1
+          fi
+
+          echo "$SCAN_BODY" > scan_results.json
+          echo "scan_completed=true" >> $GITHUB_OUTPUT
+          echo "Snippet scan completed successfully."
+
+      - name: Process scan results and comment on PR
+        if: steps.bd_scan.outputs.scan_completed == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const resultsPath = path.join(process.env.GITHUB_WORKSPACE, 'scan_results.json');
+            
+            if (!fs.existsSync(resultsPath)) {
+              console.log('scan_results.json not found. Skipping comment.');
+              return;
+            }
+
+            const response = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+            const results = response.items || [];
+
+            if (results.length === 0) {
+              console.log('No snippet matches found.');
+              return;
+            }
+
+            let high_risk_found = false;
+            let comment_body = '### :shield: Black Duck Snippet Scan Results\n\n';
+            comment_body += 'The following open source snippets were detected in the added code:\n\n';
+            
+            const highRiskFamilies = ['RECIPROCAL', 'AGPL'];
+            const mediumRiskFamilies = ['WEAK_RECIPROCAL'];
+
+            let table_header = '| Risk | Component | Version | License | License Family |\n';
+            table_header += '|:----:|:----------|:--------|:--------|:---------------|\n';
+            let table_body = '';
+
+            for (const match of results) {
+              const component = match.matchingComponent || 'N/A';
+              const version = match.version || 'N/A';
+              const license = match.licenseName || 'UNKNOWN';
+              const family = match.licenseFamily || 'UNKNOWN';
+              
+              let emoji = '🟢'; // Low risk
+              if (highRiskFamilies.includes(family)) {
+                emoji = '🔴'; // High risk
+                high_risk_found = true;
+              } else if (mediumRiskFamilies.includes(family)) {
+                emoji = '🟡'; // Medium risk
+              }
+              
+              table_body += `| ${emoji} | `${component}` | `${version}` | ${license} | ${family} |\n`;
+            }
+
+            comment_body += table_header + table_body;
+
+            if (high_risk_found) {
+              comment_body += '\n\n**Action Required:** 🔴 High-risk license(s) (Reciprocal, AGPL) detected. A review from the legal/compliance team is required before merging.';
+              core.setFailed('High-risk license snippets detected.');
+            } else {
+              comment_body += '\n\n**Notice:** 🟢 All detected snippets are within the acceptable license policy range.';
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment_body
+            });
