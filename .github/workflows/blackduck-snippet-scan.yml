@@ -8,7 +8,6 @@ jobs:
   snippet-scan:
     name: Black Duck Snippet Scan
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
 
     env:
       BLACKDUCKSCA_URL: ${{ vars.BLACKDUCKSCA_URL }}
@@ -25,9 +24,8 @@ jobs:
         id: extract_code
         run: |
           git diff --unified=0 ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | \
-          grep -E "^\\+" | \
-          grep -Ev "^\\+\\+\"" | \
-          sed 's/^+//' > changed_code.txt || true
+          awk 'BEGIN {OFS=""} /^diff --git/ {nextfile} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
+          > changed_code.txt
 
           if [ -s changed_code.txt ]; then
             echo "--- Code Snippets to be Scanned ---"
@@ -43,21 +41,43 @@ jobs:
         if: steps.extract_code.outputs.changed == 'true'
         id: bd_scan
         run: |
+          MIN_SIZE=300  # bytes
+          MAX_SIZE=50000 # bytes
+          CODE_SIZE=$(wc -c < changed_code.txt)
+
+          if [ "$CODE_SIZE" -lt "$MIN_SIZE" ]; then
+            echo "::notice::Code changes are too small (${CODE_SIZE} bytes) to be scanned. Skipping Black Duck Snippet Scan."
+            echo "scan_completed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ "$CODE_SIZE" -gt "$MAX_SIZE" ]; then
+            echo "::warning::Code changes are too large (${CODE_SIZE} bytes) for a single scan. Please consider splitting the changes into smaller Pull Requests."
+            # Optionally, create a comment on the PR
+            # gh pr comment ${{ github.event.pull_request.number }} --body "⚠️ **Warning:** The number of changes in this PR is too large to be scanned by Black Duck in a single operation. Please split this PR into smaller ones if a snippet scan is required."
+            echo "scan_completed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Code size (${CODE_SIZE} bytes) is within the scannable range."
+
+          # --- Start of existing scan logic ---
+
           AUTH_RESPONSE_FILE=$(mktemp)
+          # 스크립트 종료 시 임시 파일 자동 삭제
+          trap 'rm -f "$AUTH_RESPONSE_FILE"' EXIT
+
           AUTH_HTTP_CODE=$(curl -s -o "$AUTH_RESPONSE_FILE" -w "%{http_code}" -X POST \
             --header "Authorization: token ${BLACKDUCKSCA_TOKEN}" \
             "${BLACKDUCKSCA_URL}/api/tokens/authenticate")
           
-          AUTH_BODY=$(cat "$AUTH_RESPONSE_FILE")
-          rm "$AUTH_RESPONSE_FILE"
-
           if [ "$AUTH_HTTP_CODE" -ne 200 ]; then
             echo "::error::Failed to get Bearer Token from Black Duck (HTTP Code: $AUTH_HTTP_CODE)"
-            echo "::error::Response: $AUTH_BODY"
+            echo "::error::Response: $(cat $AUTH_RESPONSE_FILE)"
             exit 1
           fi
 
-          BEARER_TOKEN=$(echo "${AUTH_BODY}" | jq -r '.bearerToken')
+          BEARER_TOKEN=$(jq -r '.bearerToken' "$AUTH_RESPONSE_FILE")
           if [ -z "$BEARER_TOKEN" ] || [ "$BEARER_TOKEN" == "null" ]; then
             echo "::error::Bearer Token is empty. Authentication failed."
             echo "::error::Response: $AUTH_BODY"
@@ -66,23 +86,23 @@ jobs:
           echo "Successfully obtained Bearer Token."
 
           SCAN_RESPONSE_FILE=$(mktemp)
+          # 스크립트 종료 시 임시 파일 자동 삭제
+          trap 'rm -f "$AUTH_RESPONSE_FILE" "$SCAN_RESPONSE_FILE"' EXIT
+
           SCAN_HTTP_CODE=$(curl -s -o "$SCAN_RESPONSE_FILE" -w "%{http_code}" -X POST \
             -H "Authorization: Bearer ${BEARER_TOKEN}" \
             -H "Content-Type: text/plain" \
             -H "Accept: application/json" \
             --data-binary @changed_code.txt \
             "${BLACKDUCKSCA_URL}/api/snippet-matching")
-          
-          SCAN_BODY=$(cat "$SCAN_RESPONSE_FILE")
-          rm "$SCAN_RESPONSE_FILE"
 
           if [ "$SCAN_HTTP_CODE" -ne 200 ]; then
             echo "::error::Black Duck Snippet Scan API call failed (HTTP Code: $SCAN_HTTP_CODE)"
-            echo "::error::Response: $SCAN_BODY"
+            echo "::error::Response: $(cat $SCAN_RESPONSE_FILE)"
             exit 1
           fi
 
-          echo "$SCAN_BODY" > scan_results.json
+          cat "$SCAN_RESPONSE_FILE" > scan_results.json
           echo "scan_completed=true" >> $GITHUB_OUTPUT
           echo "Snippet scan completed successfully."
 
@@ -93,6 +113,7 @@ jobs:
           github-token: ${{ env.GH_TOKEN }}
           script: |
             const fs = require('fs');
+            const core = require('@actions/core');
             const path = require('path');
             const resultsPath = path.join(process.env.GITHUB_WORKSPACE, 'scan_results.json');
             
