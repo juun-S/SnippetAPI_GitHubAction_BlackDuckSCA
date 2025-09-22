@@ -17,25 +17,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        # fetch-depth: 0 ensures the runner checks out the entire git history,
+        # which guarantees that both the base and head SHAs are available for the git diff command.
         with:
-          # For pull_request events, actions/checkout typically checks out a merge commit.
-          # We need to ensure both base.sha and head.sha are available for git diff.
-          # A shallow fetch (depth 1) is usually sufficient for the initial checkout,
-          # then we explicitly fetch the specific SHAs needed for diffing.
-          fetch-depth: 1 # Start with a shallow clone to save time/resources
-
-      - name: Ensure base and head SHAs are available for diff
-        run: |
-          # Configure git to allow operations in the workspace
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          
-          # Explicitly fetch the base and head SHAs to ensure they are present in the local repository.
-          # This is crucial if the base branch was force-pushed or if the PR is from a fork
-          # and the base.sha is not directly reachable from the initial shallow clone.
-          echo "Fetching base SHA: ${{ github.event.pull_request.base.sha }}"
-          git fetch origin ${{ github.event.pull_request.base.sha }} || echo "::warning::Failed to fetch base SHA. Diff might be incomplete."
-          echo "Fetching head SHA: ${{ github.event.pull_request.head.sha }}"
-          git fetch origin ${{ github.event.pull_request.head.sha }} || echo "::warning::Failed to fetch head SHA. Diff might be incomplete."
+          fetch-depth: 0
 
       - name: Extract changed code from Pull Request
         id: extract_code
