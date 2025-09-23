@@ -54,7 +54,7 @@ jobs:
             echo "-----------------------------------"
             echo "changed=true" >> $GITHUB_OUTPUT
           else
-            echo "No new code changes detected in this Pull Request."
+            echo "No added or modified code lines found to scan in this Pull Request. Skipping snippet scan."
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
