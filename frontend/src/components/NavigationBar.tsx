@@ -1,7 +1,16 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const NavigationBar: React.FC = () => {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    delete axios.defaults.headers.common['Authorization'];
+    navigate('/login');
+  };
+
   return (
     <nav className="navbar navbar-expand-lg navbar-light bg-light">
       <div className="container-fluid">
@@ -16,6 +25,11 @@ const NavigationBar: React.FC = () => {
             </li>
             <li className="nav-item">
               <Link className="nav-link" to="/history">판매 내역</Link>
+            </li>
+          </ul>
+          <ul className="navbar-nav">
+            <li className="nav-item">
+              <button className="btn btn-outline-secondary" onClick={handleLogout}>Logout</button>
             </li>
           </ul>
         </div>

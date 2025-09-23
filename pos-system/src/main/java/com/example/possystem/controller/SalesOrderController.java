@@ -6,7 +6,14 @@ import com.example.possystem.repository.SalesOrderRepository;
 import com.example.possystem.service.SalesOrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -62,12 +69,12 @@ public class SalesOrderController {
         try {
             LocalDate localDate = LocalDate.parse(date);
             LocalDateTime startOfDay = localDate.atStartOfDay();
-            LocalDateTime endOfDay = localDate.atTime(LocalTime.MAX); // End of day (23:59:59.999999999)
+            LocalDateTime endOfDay = localDate.atTime(LocalTime.MAX);
 
             List<SalesOrder> dailyOrders = salesOrderRepository.findByOrderDateBetween(startOfDay, endOfDay);
             return ResponseEntity.ok(dailyOrders);
         } catch (DateTimeParseException e) {
-            return ResponseEntity.badRequest().build(); // Invalid date format
+            return ResponseEntity.badRequest().build();
         }
     }
 }
