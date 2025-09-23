@@ -17,14 +17,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        # fetch-depth: 0 ensures the runner checks out the entire git history,
+        # which guarantees that both the base and head SHAs are available for the git diff command.
         with:
           fetch-depth: 0
 
       - name: Extract changed code from Pull Request
         id: extract_code
         run: |
-          git diff --unified=0 ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | \
-          awk 'BEGIN {OFS=""} /^diff --git/ {nextfile} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
+          git diff --unified=0 ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} \
+          | awk 'BEGIN {OFS=""} /^diff --git/ {nextfile} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
           > changed_code.txt
 
           if [ -s changed_code.txt ]; then
