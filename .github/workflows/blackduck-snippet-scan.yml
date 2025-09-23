@@ -151,7 +151,12 @@ jobs:
             }
 
             const response = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-            const results = response.items || [];
+            // API 응답의 snippetMatches 객체에서 모든 라이선스 패밀리의 배열을 하나의 배열로 합칩니다.
+            const snippetMatches = response.snippetMatches || {};
+            const results = Object.values(snippetMatches).flat();
+
+            console.log(`Found ${results.length} total snippet matches.`);
+            console.log('Scan results:', JSON.stringify(results, null, 2));
 
             if (results.length === 0) {
               console.log('No snippet matches found.');
@@ -170,10 +175,10 @@ jobs:
             let table_body = '';
 
             for (const match of results) {
-              const component = match.matchingComponent || 'N/A';
-              const version = match.version || 'N/A';
-              const license = match.licenseName || 'UNKNOWN';
-              const family = match.licenseFamily || 'UNKNOWN';
+              const component = match.projectName || 'N/A';
+              const version = match.releaseVersion || 'N/A';
+              const license = match.licenseDefinition.spdxId || 'UNKNOWN';
+              const family = match.licenseDefinition.licenseFamilyName || 'UNKNOWN';
               
               let emoji = '🟢'; // Low risk
               if (highRiskFamilies.includes(family)) {
