@@ -174,7 +174,7 @@ jobs:
             let comment_body = '### :shield: Black Duck Snippet Scan Results\n\n';
             comment_body += 'The following open source snippets were detected in the added code:\n\n';
             
-            const highRiskFamilies = ['RECIPROCAL', 'AGPL', 'UNKNOWN'];
+            const highRiskFamilies = ['RECIPROCAL', 'AGPL'];
             const mediumRiskFamilies = ['WEAK_RECIPROCAL'];
 
             let table_header = '| Risk | Component | Version | License | License Family |\n';
