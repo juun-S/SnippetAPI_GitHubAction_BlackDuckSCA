@@ -45,7 +45,7 @@ jobs:
           # 이는 'base'와 'head'의 공통 조상과 'head'를 비교하여, 이 PR에서 발생한 순수한 변경분만 가져옵니다.
           # diff 메타데이터를 필터링하고 순수 코드 라인만 파일에 저장합니다.
           git diff --unified=0 ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
-            | awk 'BEGIN {OFS=""} /^diff --git/ {nextfile} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
+            | awk 'BEGIN {OFS=""} /^(diff|index|---)/ {next} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
             > changed_code.txt
 
           if [ -s changed_code.txt ]; then
