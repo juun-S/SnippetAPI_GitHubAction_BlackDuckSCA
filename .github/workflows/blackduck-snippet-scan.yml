@@ -90,7 +90,7 @@ jobs:
 
           AUTH_HTTP_CODE=$(curl -s -o "$AUTH_RESPONSE_FILE" -w "%{http_code}" -X POST \
             --header "Authorization: token ${BLACKDUCKSCA_TOKEN}" \
-            "${BLACKDUCKSCA_URL}/api/tokens/authenticate")
+            "${BLACKDUCKSCA_URL%/}/api/tokens/authenticate")
           
           if [ "$AUTH_HTTP_CODE" -ne 200 ]; then
             echo "::error::Failed to get Bearer Token from Black Duck (HTTP Code: $AUTH_HTTP_CODE)"
@@ -115,7 +115,7 @@ jobs:
             -H "Content-Type: text/plain" \
             -H "Accept: application/json" \
             --data-binary @changed_code.txt \
-            "${BLACKDUCKSCA_URL}/api/snippet-matching")
+            "${BLACKDUCKSCA_URL%/}/api/snippet-matching")
 
           if [ "$SCAN_HTTP_CODE" -ne 200 ]; then
             echo "::error::Black Duck Snippet Scan API call failed (HTTP Code: $SCAN_HTTP_CODE)"
