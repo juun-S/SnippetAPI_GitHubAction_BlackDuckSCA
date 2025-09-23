@@ -36,22 +36,4 @@ public class SalesOrderController {
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<SalesOrder> updateOrder(@PathVariable Long id, @RequestBody OrderRequestDTO orderRequest) {
-        return salesOrderRepository.findById(id)
-                .map(existingOrder -> {
-                    // Assuming SalesOrderService has an update method that takes existing order and DTO
-                    // Or, you can update fields directly here if the logic is simple
-                    SalesOrder updatedOrder = salesOrderService.updateOrder(existingOrder, orderRequest);
-                    return ResponseEntity.ok(updatedOrder);
-                })
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteOrder(@PathVariable Long id) {
-        salesOrderRepository.deleteById(id);
-        return ResponseEntity.noContent().build();
-    }
 }
