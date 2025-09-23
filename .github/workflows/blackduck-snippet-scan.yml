@@ -34,6 +34,11 @@ jobs:
           git cat-file -t ${{ github.event.pull_request.base.sha }} || echo "Base SHA not found locally!"
           git cat-file -t ${{ github.event.pull_request.head.sha }} || echo "Head SHA not found locally!"
           echo "::endgroup::"
+
+          echo "::group::Raw git diff output"
+          # awk로 파이프하기 전의 원본 diff 결과를 출력하여 실제 변경 내용이 있는지 확인합니다.
+          git diff --unified=0 ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}
+          echo "::endgroup::"
           # --- 디버깅 정보 출력 끝 ---
 
           # PR의 변경 사항을 가장 안정적으로 추출하기 위해 'three-dot' diff (...)를 사용합니다.
