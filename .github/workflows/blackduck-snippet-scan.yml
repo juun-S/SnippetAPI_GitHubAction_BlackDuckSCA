@@ -133,6 +133,7 @@ jobs:
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
+            const fs = require('fs');
             const path = require('path');
             const resultsPath = path.join(process.env.GITHUB_WORKSPACE, 'scan_results.json');
             
