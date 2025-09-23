@@ -25,9 +25,21 @@ jobs:
       - name: Extract changed code from Pull Request
         id: extract_code
         run: |
-          # 이 명령어는 PR의 base와 head 사이에서 추가/수정된 모든 라인을 찾아,
+          # --- 디버깅 정보 출력 시작 ---
+          echo "::group::Debugging Git Information"
+          echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
+          echo "Head SHA: ${{ github.event.pull_request.head.sha }}"
+          echo "Current Branch: $(git rev-parse --abbrev-ref HEAD)"
+          echo "Verifying SHAs are present:"
+          git cat-file -t ${{ github.event.pull_request.base.sha }} || echo "Base SHA not found locally!"
+          git cat-file -t ${{ github.event.pull_request.head.sha }} || echo "Head SHA not found locally!"
+          echo "::endgroup::"
+          # --- 디버깅 정보 출력 끝 ---
+
+          # PR의 변경 사항을 가장 안정적으로 추출하기 위해 'three-dot' diff (...)를 사용합니다.
+          # 이는 'base'와 'head'의 공통 조상과 'head'를 비교하여, 이 PR에서 발생한 순수한 변경분만 가져옵니다.
           # diff 메타데이터를 필터링하고 순수 코드 라인만 파일에 저장합니다.
-          git diff --unified=0 ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} \
+          git diff --unified=0 ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
             | awk 'BEGIN {OFS=""} /^diff --git/ {nextfile} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
             > changed_code.txt
 
