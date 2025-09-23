@@ -92,6 +92,10 @@ jobs:
             --header "Authorization: token ${BLACKDUCKSCA_TOKEN}" \
             "${BLACKDUCKSCA_URL%/}/api/tokens/authenticate")
           
+          echo "::group::Black Duck Auth API Response"
+          cat "$AUTH_RESPONSE_FILE"
+          echo "::endgroup::"
+
           if [ "$AUTH_HTTP_CODE" -ne 200 ]; then
             echo "::error::Failed to get Bearer Token from Black Duck (HTTP Code: $AUTH_HTTP_CODE)"
             echo "::error::Response: $(cat $AUTH_RESPONSE_FILE)"
@@ -116,6 +120,10 @@ jobs:
             -H "Accept: application/json" \
             --data-binary @changed_code.txt \
             "${BLACKDUCKSCA_URL%/}/api/snippet-matching")
+
+          echo "::group::Black Duck Snippet Scan API Response"
+          cat "$SCAN_RESPONSE_FILE"
+          echo "::endgroup::"
 
           if [ "$SCAN_HTTP_CODE" -ne 200 ]; then
             echo "::error::Black Duck Snippet Scan API call failed (HTTP Code: $SCAN_HTTP_CODE)"
