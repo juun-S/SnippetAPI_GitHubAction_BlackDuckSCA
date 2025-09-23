@@ -17,17 +17,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        # fetch-depth: 0 ensures the runner checks out the entire git history,
-        # which guarantees that both the base and head SHAs are available for the git diff command.
+        # fetch-depth: 0은 전체 git 히스토리를 체크아웃하여,
+        # git diff 명령에 필요한 base와 head SHA를 모두 사용할 수 있도록 보장합니다.
         with:
           fetch-depth: 0
 
       - name: Extract changed code from Pull Request
         id: extract_code
         run: |
+          # 이 명령어는 PR의 base와 head 사이에서 추가/수정된 모든 라인을 찾아,
+          # diff 메타데이터를 필터링하고 순수 코드 라인만 파일에 저장합니다.
           git diff --unified=0 ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} \
-          | awk 'BEGIN {OFS=""} /^diff --git/ {nextfile} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
-          > changed_code.txt
+            | awk 'BEGIN {OFS=""} /^diff --git/ {nextfile} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
+            > changed_code.txt
 
           if [ -s changed_code.txt ]; then
             echo "--- Code Snippets to be Scanned ---"
@@ -43,8 +45,8 @@ jobs:
         if: steps.extract_code.outputs.changed == 'true'
         id: bd_scan
         run: |
-          MIN_SIZE=300  # bytes
-          MAX_SIZE=50000 # bytes
+          MIN_SIZE=300    # 바이트 단위
+          MAX_SIZE=50000  # 바이트 단위
           CODE_SIZE=$(wc -c < changed_code.txt)
 
           if [ "$CODE_SIZE" -lt "$MIN_SIZE" ]; then
@@ -55,7 +57,7 @@ jobs:
 
           if [ "$CODE_SIZE" -gt "$MAX_SIZE" ]; then
             echo "::warning::Code changes are too large (${CODE_SIZE} bytes) for a single scan. Please consider splitting the changes into smaller Pull Requests."
-            # Optionally, create a comment on the PR
+            # 필요시, PR에 직접 코멘트를 생성할 수 있습니다.
             # gh pr comment ${{ github.event.pull_request.number }} --body "⚠️ **Warning:** The number of changes in this PR is too large to be scanned by Black Duck in a single operation. Please split this PR into smaller ones if a snippet scan is required."
             echo "scan_completed=false" >> $GITHUB_OUTPUT
             exit 0
@@ -63,7 +65,7 @@ jobs:
 
           echo "Code size (${CODE_SIZE} bytes) is within the scannable range."
 
-          # --- Start of existing scan logic ---
+          # --- 기존 스캔 로직 시작 ---
 
           AUTH_RESPONSE_FILE=$(mktemp)
           # 스크립트 종료 시 임시 파일 자동 삭제
