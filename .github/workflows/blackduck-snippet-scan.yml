@@ -174,7 +174,7 @@ jobs:
                 emoji = '🟡'; // Medium risk
               }
               
-              table_body += `| ${emoji} | `${component}` | `${version}` | ${license} | ${family} |\n`;
+              table_body += `| ${emoji} | \`${component}\` | \`${version}\` | ${license} | ${family} |\n`;
             }
 
             comment_body += table_header + table_body;
