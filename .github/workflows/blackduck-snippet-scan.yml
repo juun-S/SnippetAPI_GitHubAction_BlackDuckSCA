@@ -154,8 +154,12 @@ jobs:
             // API 응답의 snippetMatches 객체에서 모든 라이선스 패밀리별 배열을 순회합니다.
             const snippetMatches = response.snippetMatches || {};
             const results = [];
+            // snippetMatches 객체를 순회하며 각 스니펫에 라이선스 패밀리 이름을 주입합니다.
             for (const familyName in snippetMatches) {
-              results.push(...snippetMatches[familyName]);
+              for (const match of snippetMatches[familyName]) {
+                match.licenseFamilyName = familyName; // 라이선스 패밀리 이름(키)을 객체에 추가
+                results.push(match);
+              }
             }
             
             console.log(`Found ${results.length} total snippet matches.`);
@@ -181,7 +185,7 @@ jobs:
               const component = match.projectName || 'N/A';
               const version = match.releaseVersion || 'N/A';
               const license = match.licenseDefinition?.spdxId || 'UNKNOWN';
-              const family = match.licenseDefinition?.licenseFamilyName || 'UNKNOWN';
+              const family = match.licenseFamilyName || 'UNKNOWN'; // 주입된 라이선스 패밀리 이름을 사용합니다.
               
               let emoji = '🟢'; // Low risk
               if (highRiskFamilies.includes(family)) {
