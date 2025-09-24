@@ -45,7 +45,7 @@ jobs:
           # 이는 'base'와 'head'의 공통 조상과 'head'를 비교하여, 이 PR에서 발생한 순수한 변경분만 가져옵니다.
           # diff 메타데이터를 필터링하고 순수 코드 라인만 파일에 저장합니다.
           git diff --unified=0 ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
-            | awk 'BEGIN {OFS=""} /^diff --git/ {nextfile} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
+            | awk 'BEGIN {OFS=""} /^(diff|index|---)/ {next} /^\+\+\+/ {next} /^\+/ {print substr($0, 2)}' \
             > changed_code.txt
 
           if [ -s changed_code.txt ]; then
@@ -90,8 +90,12 @@ jobs:
 
           AUTH_HTTP_CODE=$(curl -s -o "$AUTH_RESPONSE_FILE" -w "%{http_code}" -X POST \
             --header "Authorization: token ${BLACKDUCKSCA_TOKEN}" \
-            "${BLACKDUCKSCA_URL}/api/tokens/authenticate")
+            "${BLACKDUCKSCA_URL%/}/api/tokens/authenticate")
           
+          echo "::group::Black Duck Auth API Response"
+          cat "$AUTH_RESPONSE_FILE"
+          echo "::endgroup::"
+
           if [ "$AUTH_HTTP_CODE" -ne 200 ]; then
             echo "::error::Failed to get Bearer Token from Black Duck (HTTP Code: $AUTH_HTTP_CODE)"
             echo "::error::Response: $(cat $AUTH_RESPONSE_FILE)"
@@ -115,7 +119,11 @@ jobs:
             -H "Content-Type: text/plain" \
             -H "Accept: application/json" \
             --data-binary @changed_code.txt \
-            "${BLACKDUCKSCA_URL}/api/snippet-matching")
+            "${BLACKDUCKSCA_URL%/}/api/snippet-matching")
+
+          echo "::group::Black Duck Snippet Scan API Response"
+          cat "$SCAN_RESPONSE_FILE"
+          echo "::endgroup::"
 
           if [ "$SCAN_HTTP_CODE" -ne 200 ]; then
             echo "::error::Black Duck Snippet Scan API call failed (HTTP Code: $SCAN_HTTP_CODE)"
@@ -134,7 +142,6 @@ jobs:
           github-token: ${{ env.GH_TOKEN }}
           script: |
             const fs = require('fs');
-            const core = require('@actions/core');
             const path = require('path');
             const resultsPath = path.join(process.env.GITHUB_WORKSPACE, 'scan_results.json');
             
@@ -144,7 +151,19 @@ jobs:
             }
 
             const response = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-            const results = response.items || [];
+            // API 응답의 snippetMatches 객체에서 모든 라이선스 패밀리별 배열을 순회합니다.
+            const snippetMatches = response.snippetMatches || {};
+            const results = [];
+            // snippetMatches 객체를 순회하며 각 스니펫에 라이선스 패밀리 이름을 주입합니다.
+            for (const familyName in snippetMatches) {
+              for (const match of snippetMatches[familyName]) {
+                match.licenseFamilyName = familyName; // 라이선스 패밀리 이름(키)을 객체에 추가
+                results.push(match);
+              }
+            }
+            
+            console.log(`Found ${results.length} total snippet matches.`);
+            console.log('Scan results:', JSON.stringify(results, null, 2));
 
             if (results.length === 0) {
               console.log('No snippet matches found.');
@@ -163,10 +182,10 @@ jobs:
             let table_body = '';
 
             for (const match of results) {
-              const component = match.matchingComponent || 'N/A';
-              const version = match.version || 'N/A';
-              const license = match.licenseName || 'UNKNOWN';
-              const family = match.licenseFamily || 'UNKNOWN';
+              const component = match.projectName || 'N/A';
+              const version = match.releaseVersion || 'N/A';
+              const license = match.licenseDefinition?.spdxId || 'UNKNOWN';
+              const family = match.licenseFamilyName || 'UNKNOWN'; // 주입된 라이선스 패밀리 이름을 사용합니다.
               
               let emoji = '🟢'; // Low risk
               if (highRiskFamilies.includes(family)) {
@@ -176,7 +195,7 @@ jobs:
                 emoji = '🟡'; // Medium risk
               }
               
-              table_body += `| ${emoji} | `${component}` | `${version}` | ${license} | ${family} |\n`;
+              table_body += `| ${emoji} | \`${component}\` | \`${version}\` | ${license} | ${family} |\n`;
             }
 
             comment_body += table_header + table_body;

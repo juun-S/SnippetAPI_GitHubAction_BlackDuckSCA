@@ -6,8 +6,19 @@ import com.example.possystem.repository.SalesOrderRepository;
 import com.example.possystem.service.SalesOrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @RestController
@@ -41,8 +52,6 @@ public class SalesOrderController {
     public ResponseEntity<SalesOrder> updateOrder(@PathVariable Long id, @RequestBody OrderRequestDTO orderRequest) {
         return salesOrderRepository.findById(id)
                 .map(existingOrder -> {
-                    // Assuming SalesOrderService has an update method that takes existing order and DTO
-                    // Or, you can update fields directly here if the logic is simple
                     SalesOrder updatedOrder = salesOrderService.updateOrder(existingOrder, orderRequest);
                     return ResponseEntity.ok(updatedOrder);
                 })
@@ -53,5 +62,19 @@ public class SalesOrderController {
     public ResponseEntity<Void> deleteOrder(@PathVariable Long id) {
         salesOrderRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/daily/{date}")
+    public ResponseEntity<List<SalesOrder>> getDailySalesOrders(@PathVariable String date) {
+        try {
+            LocalDate localDate = LocalDate.parse(date);
+            LocalDateTime startOfDay = localDate.atStartOfDay();
+            LocalDateTime endOfDay = localDate.atTime(LocalTime.MAX);
+
+            List<SalesOrder> dailyOrders = salesOrderRepository.findByOrderDateBetween(startOfDay, endOfDay);
+            return ResponseEntity.ok(dailyOrders);
+        } catch (DateTimeParseException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 }
